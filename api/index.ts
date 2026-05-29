@@ -641,6 +641,279 @@ app.get("/api/og/blog/:slug", async (req, res) => {
 </head><body><p>Redirection vers <a href="${url}">${title}</a>...</p></body></html>`);
 });
 
+
+// ══════════════════════════════════════════════════════════════════
+// DataMEAL ACADEMY — School Management System
+// ══════════════════════════════════════════════════════════════════
+
+function generateStudentToken(id: number, email: string): string {
+  return jwt.sign({ sid: id, email, role: "student" }, JWT_SECRET, { expiresIn: "30d" });
+}
+
+function requireStudent(req: Request, res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) return res.status(401).json({ message: "Connexion requise" });
+  try {
+    const decoded = jwt.verify(header.slice(7), JWT_SECRET) as any;
+    if (decoded.role !== "student") return res.status(403).json({ message: "Accès réservé aux étudiants" });
+    (req as any).student = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ message: "Session expirée" });
+  }
+}
+
+// ── Inscription (après réussite du test, score >= 21/30) ──
+app.post("/api/academy/register", async (req, res) => {
+  const { full_name, email, password, phone, country, organization, entry_score } = req.body;
+  if (!full_name || !email || !password) return res.status(400).json({ message: "Nom, email et mot de passe requis" });
+  if (password.length < 6) return res.status(400).json({ message: "Le mot de passe doit faire au moins 6 caractères" });
+  if ((entry_score ?? 0) < 21) return res.status(403).json({ message: "Score insuffisant. Vous devez obtenir au moins 21/30 au test." });
+
+  const { data: existing } = await supabase.from("students").select("id").eq("email", email).maybeSingle();
+  if (existing) return res.status(409).json({ message: "Un compte existe déjà avec cet email" });
+
+  const hash = await bcrypt.hash(password, 10);
+  const { data, error } = await supabase.from("students")
+    .insert({ full_name, email, password_hash: hash, phone, country, organization, entry_score })
+    .select("id, full_name, email").single();
+  if (error) return res.status(400).json({ message: error.message });
+
+  // Note du test d'entrée
+  await supabase.from("grades").insert({
+    student_id: data.id, title: "Test de sélection MEAL", score: entry_score, max_score: 30, type: "entry_test",
+  });
+
+  // Inscription automatique au cours 1
+  const { data: course1 } = await supabase.from("sms_courses").select("id").eq("code", "MEAL-01").single();
+  if (course1) await supabase.from("enrollments").insert({ student_id: data.id, course_id: course1.id });
+
+  const token = generateStudentToken(data.id, data.email);
+  res.status(201).json({ token, student: data });
+});
+
+// ── Connexion ──
+app.post("/api/academy/login", async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ message: "Email et mot de passe requis" });
+  const { data, error } = await supabase.from("students").select("*").eq("email", email).maybeSingle();
+  if (error || !data) return res.status(401).json({ message: "Identifiants invalides" });
+  if (data.status === "suspended") return res.status(403).json({ message: "Compte suspendu" });
+  const valid = await bcrypt.compare(password, data.password_hash);
+  if (!valid) return res.status(401).json({ message: "Identifiants invalides" });
+  const token = generateStudentToken(data.id, data.email);
+  res.json({ token, student: { id: data.id, full_name: data.full_name, email: data.email, avatar_url: data.avatar_url } });
+});
+
+// ── Profil étudiant connecté ──
+app.get("/api/academy/me", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { data, error } = await supabase.from("students")
+    .select("id, full_name, email, phone, country, organization, entry_score, avatar_url, status, created_at")
+    .eq("id", sid).single();
+  if (error) return res.status(404).json({ message: "Étudiant introuvable" });
+  res.json(data);
+});
+
+// ── Liste des cours ──
+app.get("/api/academy/courses", async (_req, res) => {
+  const { data, error } = await supabase.from("sms_courses").select("*").eq("is_published", true).order("order_index");
+  if (error) return res.status(500).json({ message: error.message });
+  res.json(data);
+});
+
+// ── Détail d'un cours + leçons ──
+app.get("/api/academy/courses/:id", async (req, res) => {
+  const { data: course, error } = await supabase.from("sms_courses").select("*").eq("id", Number(req.params.id)).single();
+  if (error) return res.status(404).json({ message: "Cours introuvable" });
+  const { data: lessons } = await supabase.from("sms_lessons").select("*").eq("course_id", course.id).order("order_index");
+  res.json({ ...course, lessons: lessons || [] });
+});
+
+// ── Mes inscriptions (avec infos cours) ──
+app.get("/api/academy/my-enrollments", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { data, error } = await supabase.from("enrollments")
+    .select("*, sms_courses(id, code, title, description, tools, level, total_lessons)")
+    .eq("student_id", sid).order("enrolled_at", { ascending: false });
+  if (error) return res.status(500).json({ message: error.message });
+  res.json(data);
+});
+
+// ── S'inscrire à un cours ──
+app.post("/api/academy/enroll", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { course_id } = req.body;
+  if (!course_id) return res.status(400).json({ message: "course_id requis" });
+  const { data, error } = await supabase.from("enrollments")
+    .insert({ student_id: sid, course_id }).select().single();
+  if (error) {
+    if (error.code === "23505") return res.status(409).json({ message: "Déjà inscrit à ce cours" });
+    return res.status(400).json({ message: error.message });
+  }
+  res.status(201).json(data);
+});
+
+// ── Mes notes (gradebook) ──
+app.get("/api/academy/my-grades", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { data, error } = await supabase.from("grades")
+    .select("*, sms_courses(code, title)")
+    .eq("student_id", sid).order("graded_at", { ascending: true });
+  if (error) return res.status(500).json({ message: error.message });
+  // Moyenne pondérée
+  const arr = data || [];
+  const avg = arr.length ? arr.reduce((a, g) => a + (Number(g.score) / Number(g.max_score)) * 100, 0) / arr.length : 0;
+  res.json({ grades: arr, average: Math.round(avg * 10) / 10, count: arr.length });
+});
+
+// ── Compléter une leçon (auto-note + progression) ──
+app.post("/api/academy/complete-lesson", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { course_id, lesson_id, score } = req.body;
+  if (!course_id || !lesson_id) return res.status(400).json({ message: "course_id et lesson_id requis" });
+
+  // Récup la leçon pour le titre + points
+  const { data: lesson } = await supabase.from("sms_lessons").select("title, points").eq("id", lesson_id).single();
+  const finalScore = score ?? (lesson?.points ?? 10);
+  const maxScore = lesson?.points ?? 10;
+
+  // Eviter doublon de note
+  const { data: existingGrade } = await supabase.from("grades")
+    .select("id").eq("student_id", sid).eq("lesson_id", lesson_id).maybeSingle();
+  if (!existingGrade) {
+    await supabase.from("grades").insert({
+      student_id: sid, course_id, lesson_id,
+      title: lesson?.title || "Leçon", score: finalScore, max_score: maxScore, type: "lesson",
+    });
+  }
+
+  // Recalcul progression
+  const { count: totalLessons } = await supabase.from("sms_lessons")
+    .select("id", { count: "exact", head: true }).eq("course_id", course_id);
+  const { data: doneGrades } = await supabase.from("grades")
+    .select("lesson_id").eq("student_id", sid).eq("course_id", course_id).eq("type", "lesson");
+  const doneCount = new Set((doneGrades || []).map(g => g.lesson_id)).size;
+  const progress = totalLessons ? Math.round((doneCount / totalLessons) * 100) : 0;
+
+  await supabase.from("enrollments")
+    .update({ progress, status: progress >= 100 ? "completed" : "in_progress", completed_at: progress >= 100 ? new Date().toISOString() : null })
+    .eq("student_id", sid).eq("course_id", course_id);
+
+  res.json({ progress, done: doneCount, total: totalLessons || 0 });
+});
+
+// ── Demander une attestation ──
+app.post("/api/academy/attestation", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { course_id } = req.body;
+  if (!course_id) return res.status(400).json({ message: "course_id requis" });
+
+  const { data: enr } = await supabase.from("enrollments")
+    .select("progress, status").eq("student_id", sid).eq("course_id", course_id).maybeSingle();
+  if (!enr || enr.progress < 100) return res.status(403).json({ message: "Vous devez compléter 100% du cours avant de demander l'attestation." });
+
+  const { data: existing } = await supabase.from("attestations")
+    .select("id, status").eq("student_id", sid).eq("course_id", course_id).maybeSingle();
+  if (existing) return res.status(409).json({ message: "Attestation déjà demandée", status: existing.status });
+
+  // Score final = moyenne des notes du cours
+  const { data: courseGrades } = await supabase.from("grades")
+    .select("score, max_score").eq("student_id", sid).eq("course_id", course_id);
+  const arr = courseGrades || [];
+  const finalScore = arr.length ? Math.round(arr.reduce((a, g) => a + (Number(g.score) / Number(g.max_score)) * 100, 0) / arr.length * 10) / 10 : 0;
+  const certNo = `DMA-${course_id}-${sid}-${Date.now().toString(36).toUpperCase()}`;
+
+  const { data, error } = await supabase.from("attestations")
+    .insert({ student_id: sid, course_id, certificate_no: certNo, final_score: finalScore, status: "pending" })
+    .select().single();
+  if (error) return res.status(400).json({ message: error.message });
+  res.status(201).json(data);
+});
+
+// ── Mes attestations ──
+app.get("/api/academy/my-attestations", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { data, error } = await supabase.from("attestations")
+    .select("*, sms_courses(code, title)").eq("student_id", sid).order("requested_at", { ascending: false });
+  if (error) return res.status(500).json({ message: error.message });
+  res.json(data);
+});
+
+// ══════════════ ADMIN — Gestion école ══════════════
+
+app.get("/api/admin/academy/students", requireAuth, async (_req, res) => {
+  const { data, error } = await supabase.from("students")
+    .select("id, full_name, email, phone, country, organization, entry_score, status, created_at")
+    .order("created_at", { ascending: false });
+  if (error) return res.status(500).json({ message: error.message });
+  res.json(data);
+});
+
+app.get("/api/admin/academy/students/:id", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const [student, grades, enrollments, attestations] = await Promise.all([
+    supabase.from("students").select("*").eq("id", id).single(),
+    supabase.from("grades").select("*, sms_courses(code, title)").eq("student_id", id).order("graded_at", { ascending: true }),
+    supabase.from("enrollments").select("*, sms_courses(code, title)").eq("student_id", id),
+    supabase.from("attestations").select("*, sms_courses(code, title)").eq("student_id", id),
+  ]);
+  if (student.error) return res.status(404).json({ message: "Étudiant introuvable" });
+  res.json({ student: student.data, grades: grades.data || [], enrollments: enrollments.data || [], attestations: attestations.data || [] });
+});
+
+// Attribuer une note manuelle
+app.post("/api/admin/academy/grades", requireAuth, async (req, res) => {
+  const { student_id, course_id, lesson_id, title, score, max_score, type, feedback } = req.body;
+  if (!student_id || !title || score == null) return res.status(400).json({ message: "student_id, title et score requis" });
+  const { data, error } = await supabase.from("grades")
+    .insert({ student_id, course_id, lesson_id, title, score, max_score: max_score || 100, type: type || "exam", feedback })
+    .select().single();
+  if (error) return res.status(400).json({ message: error.message });
+  res.status(201).json(data);
+});
+
+app.delete("/api/admin/academy/grades/:id", requireAuth, async (req, res) => {
+  const { error } = await supabase.from("grades").delete().eq("id", Number(req.params.id));
+  if (error) return res.status(400).json({ message: error.message });
+  res.json({ message: "Supprimé" });
+});
+
+// Valider / émettre une attestation
+app.get("/api/admin/academy/attestations", requireAuth, async (_req, res) => {
+  const { data, error } = await supabase.from("attestations")
+    .select("*, students(full_name, email), sms_courses(code, title)")
+    .order("requested_at", { ascending: false });
+  if (error) return res.status(500).json({ message: error.message });
+  res.json(data);
+});
+
+app.put("/api/admin/academy/attestations/:id", requireAuth, async (req, res) => {
+  const { status } = req.body;
+  const update: any = { status };
+  if (status === "issued") update.issued_at = new Date().toISOString();
+  const { data, error } = await supabase.from("attestations").update(update).eq("id", Number(req.params.id)).select().single();
+  if (error) return res.status(400).json({ message: error.message });
+  res.json(data);
+});
+
+// Stats école
+app.get("/api/admin/academy/stats", requireAuth, async (_req, res) => {
+  const [students, enrollments, attestations, courses] = await Promise.all([
+    supabase.from("students").select("id", { count: "exact", head: true }),
+    supabase.from("enrollments").select("id", { count: "exact", head: true }),
+    supabase.from("attestations").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    supabase.from("sms_courses").select("id", { count: "exact", head: true }),
+  ]);
+  res.json({
+    students: students.count || 0,
+    enrollments: enrollments.count || 0,
+    pendingAttestations: attestations.count || 0,
+    courses: courses.count || 0,
+  });
+});
+
+
 // Error handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Error:", err);
