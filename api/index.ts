@@ -665,31 +665,73 @@ function requireStudent(req: Request, res: Response, next: NextFunction) {
 
 // ── Inscription (après réussite du test, score >= 21/30) ──
 app.post("/api/academy/register", async (req, res) => {
-  const { full_name, email, password, phone, country, organization, entry_score } = req.body;
+  const { full_name, email, password, phone, country, organization } = req.body;
   if (!full_name || !email || !password) return res.status(400).json({ message: "Nom, email et mot de passe requis" });
   if (password.length < 6) return res.status(400).json({ message: "Le mot de passe doit faire au moins 6 caractères" });
-  if ((entry_score ?? 0) < 21) return res.status(403).json({ message: "Score insuffisant. Vous devez obtenir au moins 21/30 au test." });
 
   const { data: existing } = await supabase.from("students").select("id").eq("email", email).maybeSingle();
   if (existing) return res.status(409).json({ message: "Un compte existe déjà avec cet email" });
 
   const hash = await bcrypt.hash(password, 10);
+  // status "pending_test" : doit passer le test avant d'accéder aux cours
   const { data, error } = await supabase.from("students")
-    .insert({ full_name, email, password_hash: hash, phone, country, organization, entry_score })
-    .select("id, full_name, email").single();
+    .insert({ full_name, email, password_hash: hash, phone, country, organization, entry_score: 0, status: "pending_test" })
+    .select("id, full_name, email, status").single();
   if (error) return res.status(400).json({ message: error.message });
-
-  // Note du test d'entrée
-  await supabase.from("grades").insert({
-    student_id: data.id, title: "Test de sélection MEAL", score: entry_score, max_score: 30, type: "entry_test",
-  });
-
-  // Inscription automatique au cours 1
-  const { data: course1 } = await supabase.from("sms_courses").select("id").eq("code", "MEAL-01").single();
-  if (course1) await supabase.from("enrollments").insert({ student_id: data.id, course_id: course1.id });
 
   const token = generateStudentToken(data.id, data.email);
   res.status(201).json({ token, student: data });
+});
+
+// ── Soumettre le test d'aptitude (étudiant authentifié uniquement) ──
+app.post("/api/academy/submit-test", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { score } = req.body;
+  if (score == null) return res.status(400).json({ message: "Score requis" });
+
+  const passed = score >= 21;
+
+  // Mettre à jour le score d'entrée + statut
+  await supabase.from("students")
+    .update({ entry_score: score, status: passed ? "active" : "pending_test" })
+    .eq("id", sid);
+
+  // Enregistrer/mettre à jour la note du test
+  const { data: existingTest } = await supabase.from("grades")
+    .select("id").eq("student_id", sid).eq("type", "entry_test").maybeSingle();
+  if (existingTest) {
+    await supabase.from("grades").update({ score, graded_at: new Date().toISOString() }).eq("id", existingTest.id);
+  } else {
+    await supabase.from("grades").insert({
+      student_id: sid, title: "Test de sélection MEAL", score, max_score: 30, type: "entry_test",
+    });
+  }
+
+  // Si réussi, inscrire automatiquement au cours 1 (si pas déjà inscrit)
+  if (passed) {
+    const { data: course1 } = await supabase.from("sms_courses").select("id").eq("code", "MEAL-01").single();
+    if (course1) {
+      const { data: enr } = await supabase.from("enrollments")
+        .select("id").eq("student_id", sid).eq("course_id", course1.id).maybeSingle();
+      if (!enr) await supabase.from("enrollments").insert({ student_id: sid, course_id: course1.id });
+    }
+  }
+
+  res.json({ passed, score, status: passed ? "active" : "pending_test" });
+});
+
+// ── Statut du test pour l'étudiant connecté ──
+app.get("/api/academy/test-status", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { data } = await supabase.from("students").select("entry_score, status").eq("id", sid).single();
+  const { data: test } = await supabase.from("grades")
+    .select("score, graded_at").eq("student_id", sid).eq("type", "entry_test").maybeSingle();
+  res.json({
+    hasTaken: !!test,
+    score: data?.entry_score ?? 0,
+    passed: (data?.entry_score ?? 0) >= 21,
+    status: data?.status ?? "pending_test",
+  });
 });
 
 // ── Connexion ──
