@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { SEO } from "@/components/seo";
 import {
   GraduationCap, ChevronRight, ChevronLeft, CheckCircle2,
@@ -171,6 +172,7 @@ const CHAPTERS = [
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function ELearning() {
   const [view, setView] = useState<View>("landing");
+  const [, navigate] = useLocation();
   const [qIdx, setQIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [score, setScore] = useState<number | null>(null);
@@ -196,6 +198,7 @@ export default function ELearning() {
     let s = 0;
     QUESTIONS.forEach((q, i) => { if (answers[i] === q.ans) s++; });
     setScore(s);
+    if (s >= 21) sessionStorage.setItem("academy_entry_score", String(s));
     setView("test-result");
   }
 
@@ -386,10 +389,15 @@ export default function ELearning() {
         </p>
         <div className="flex flex-wrap gap-4 justify-center mb-10">
           {passed
-            ? <Button size="lg" className="gap-2" onClick={() => setView("dashboard")}><BookOpen className="w-4 h-4" /> Accéder à mes projets</Button>
+            ? <Button size="lg" className="gap-2" onClick={() => navigate("/academy/register")}><GraduationCap className="w-4 h-4" /> Créer mon compte étudiant</Button>
             : <Button size="lg" className="gap-2" onClick={() => { setAnswers({}); setQIdx(0); setScore(null); setView("test"); }}>↺ Reprendre le test</Button>}
           <Button variant="outline" onClick={() => setView("landing")}>← Retour</Button>
         </div>
+        {passed && (
+          <p className="text-sm text-muted-foreground mb-6">
+            Déjà inscrit ? <button onClick={() => navigate("/academy/login")} className="text-primary hover:underline">Se connecter à mon espace</button>
+          </p>
+        )}
 
         {/* Détail */}
         <div className="bg-card rounded-2xl border border-border/50 p-6 text-left">
