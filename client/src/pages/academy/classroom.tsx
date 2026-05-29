@@ -4,13 +4,49 @@ import { SEO } from "@/components/seo";
 import { Button } from "@/components/ui/button";
 import {
   ChevronLeft, ChevronRight, CheckCircle2, PlayCircle, Terminal,
-  FileCode2, Loader2, Trophy, Lock, BookOpen, Star,
+  FileCode2, Loader2, Trophy, Lock, BookOpen, Star, Info, Lightbulb,
+  AlertTriangle, ExternalLink, MapPin, BookMarked,
 } from "lucide-react";
 import { studentFetch, isStudentLoggedIn } from "@/lib/student";
 
-interface Cell { type: string; content?: string; lang?: string; code?: string; output?: string; }
+interface Cell { type: string; content?: string; lang?: string; code?: string; output?: string; variant?: string; title?: string; url?: string; provider?: string; desc?: string; question?: string; opts?: string[]; ans?: number; }
 interface Lesson { id: number; title: string; content: { cells: Cell[] }; points: number; order_index: number; }
 interface Course { id: number; code: string; title: string; description: string; tools: string[]; lessons: Lesson[]; }
+
+
+function QuizCell({ cell }: { cell: any }) {
+  const [picked, setPicked] = useState<number | null>(null);
+  const correct = picked === cell.ans;
+  return (
+    <div className="bg-card rounded-2xl border border-border/50 p-4">
+      <div className="flex items-center gap-2 mb-3 text-sm font-medium"><Info className="w-4 h-4 text-primary" /> Question rapide</div>
+      <p className="text-sm mb-3">{cell.question}</p>
+      <div className="space-y-2">
+        {(cell.opts || []).map((opt: string, i: number) => {
+          const isPicked = picked === i;
+          const show = picked !== null;
+          const isAns = i === cell.ans;
+          return (
+            <button key={i} onClick={() => setPicked(i)} disabled={picked !== null}
+              className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm transition-colors ${
+                show && isAns ? "border-primary bg-primary/10 text-primary" :
+                show && isPicked && !isAns ? "border-destructive bg-destructive/10 text-destructive" :
+                isPicked ? "border-primary bg-primary/10" :
+                "border-border hover:border-primary/40"
+              }`}>
+              <span className="font-mono text-xs text-muted-foreground mr-2">{String.fromCharCode(65 + i)}.</span>{opt}
+            </button>
+          );
+        })}
+      </div>
+      {picked !== null && (
+        <p className={`text-sm mt-3 font-medium ${correct ? "text-primary" : "text-amber-600 dark:text-amber-400"}`}>
+          {correct ? "✓ Correct !" : `La bonne réponse est ${String.fromCharCode(65 + cell.ans)}.`}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function AcademyClassroom() {
   const [, navigate] = useLocation();
@@ -125,22 +161,88 @@ export default function AcademyClassroom() {
         {/* Notebook cells */}
         <div className="space-y-4 mb-8">
           {cells.map((cell, ci) => {
+            // ── Markdown (avec tableaux simples) ──
             if (cell.type === "md") {
               return (
-                <div key={ci} className="bg-card rounded-2xl border border-border/50 overflow-hidden">
-                  <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/30">
-                    <FileCode2 className="w-3.5 h-3.5 text-primary" /><span className="text-xs text-muted-foreground font-mono">markdown</span>
+                <div key={ci} className="px-1 py-1 text-sm leading-relaxed">
+                  {(cell.content || "").split("\n").map((line, li) => {
+                    if (line.startsWith("### ")) return <h4 key={li} className="font-semibold text-[15px] mt-4 mb-1.5">{line.slice(4)}</h4>;
+                    if (line.startsWith("## ")) return <h3 key={li} className="font-bold text-lg mt-3 mb-2">{line.slice(3)}</h3>;
+                    if (line.startsWith("| ")) return <div key={li} className="font-mono text-xs bg-muted/60 px-3 py-1 my-0.5 rounded overflow-x-auto whitespace-nowrap">{line.replace(/\|/g, " | ").replace(/---/g, "—")}</div>;
+                    if (line.match(/^\d+\. /)) return <div key={li} className="ml-3 text-muted-foreground my-1">{line.replace(/\*\*(.+?)\*\*/g, "$1")}</div>;
+                    if (line.startsWith("- ")) return <div key={li} className="ml-3 text-muted-foreground my-0.5">• {line.slice(2).replace(/\*\*(.+?)\*\*/g, "$1")}</div>;
+                    if (line.startsWith("```")) return null;
+                    if (line.trim() === "") return <div key={li} className="h-1" />;
+                    return <p key={li} className="text-muted-foreground my-1" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g, "<strong class='text-foreground'>$1</strong>").replace(/`(.+?)`/g, "<code class='font-mono text-xs bg-muted px-1.5 py-0.5 rounded'>$1</code>") }} />;
+                  })}
+                </div>
+              );
+            }
+
+            // ── Callout (situation réelle / astuce / attention) ──
+            if (cell.type === "callout") {
+              const cfg: Record<string, { icon: any; cls: string; lab: string }> = {
+                real: { icon: MapPin, cls: "bg-primary/5 border-primary/30 text-primary", lab: "Situation réelle" },
+                tip: { icon: Lightbulb, cls: "bg-blue-50 dark:bg-blue-900/15 border-blue-200 dark:border-blue-900/40 text-blue-700 dark:text-blue-300", lab: "Astuce" },
+                warning: { icon: AlertTriangle, cls: "bg-amber-50 dark:bg-amber-900/15 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300", lab: "Attention" },
+              };
+              const v = cfg[cell.variant || "tip"] || cfg.tip;
+              const Icon = v.icon;
+              return (
+                <div key={ci} className={`rounded-2xl border p-4 ${v.cls}`}>
+                  <div className="flex items-center gap-2 mb-1.5 font-medium text-sm">
+                    <Icon className="w-4 h-4" /> {cell.title || v.lab}
                   </div>
-                  <div className="px-5 py-4 text-sm leading-relaxed">
-                    {(cell.content || "").split("\n").map((line, li) =>
-                      line.startsWith("## ")
-                        ? <h3 key={li} className="font-semibold text-base mt-2 mb-1">{line.slice(3)}</h3>
-                        : <p key={li} className="text-muted-foreground">{line}</p>
-                    )}
+                  <p className="text-sm text-foreground/80 leading-relaxed">{cell.content}</p>
+                </div>
+              );
+            }
+
+            // ── Ressource externe open-source ──
+            if (cell.type === "resource") {
+              return (
+                <a key={ci} href={cell.url} target="_blank" rel="noopener noreferrer"
+                  className="group block bg-card rounded-2xl border border-border/50 p-4 hover:border-primary/40 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <BookMarked className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm group-hover:text-primary transition-colors">{cell.title}</span>
+                        <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{cell.provider}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{cell.desc}</p>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                  </div>
+                </a>
+              );
+            }
+
+            // ── Quiz inline ──
+            if (cell.type === "quiz") {
+              return <QuizCell key={ci} cell={cell} />;
+            }
+
+            // ── Notebook LIVE (JupyterLite embed — exécute vraiment dans le navigateur) ──
+            if (cell.type === "embed") {
+              const liteUrl = `https://jupyterlite.github.io/demo/repl/index.html?kernel=python&toolbar=1&theme=JupyterLab%20Light&code=${encodeURIComponent(cell.code || "")}`;
+              return (
+                <div key={ci} className="bg-card rounded-2xl border border-primary/30 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 bg-primary/5">
+                    <div className="flex items-center gap-2"><PlayCircle className="w-3.5 h-3.5 text-primary" /><span className="text-xs text-primary font-medium">{cell.title || "Notebook live"}</span></div>
+                    <span className="text-[10px] text-muted-foreground font-mono">JupyterLite · 100% gratuit · dans le navigateur</span>
+                  </div>
+                  <iframe src={liteUrl} className="w-full" style={{ height: 360, border: "none" }} title={cell.title || "notebook"} loading="lazy" />
+                  <div className="px-4 py-2 bg-muted/20 border-t border-border/50">
+                    <p className="text-xs text-muted-foreground">▶ Cliquez dans la cellule et appuyez sur <kbd className="font-mono bg-muted px-1.5 py-0.5 rounded text-[10px]">Maj+Entrée</kbd> pour exécuter. Modifiez le code librement.</p>
                   </div>
                 </div>
               );
             }
+
+            // ── Code statique (run pour révéler l'output) ──
             const codeIdx = cells.slice(0, ci).filter(c => c.type === "code").length;
             const key = `${activeLesson}-code-${codeIdx}`;
             const ran = ranCells.has(key);
