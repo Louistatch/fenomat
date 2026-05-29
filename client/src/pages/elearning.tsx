@@ -333,6 +333,45 @@ export default function ELearning() {
           </div>
         </div>
 
+        {/* Témoignages */}
+        <div className="mb-16">
+          <h2 className="text-2xl font-bold mb-2">Ils ont suivi la formation</h2>
+          <p className="text-muted-foreground mb-8">Des professionnels du MEAL en Afrique de l'Ouest, formés par les projets.</p>
+          <div className="grid lg:grid-cols-3 gap-5">
+            {[
+              {
+                name: "Aïcha D.", role: "Agent de suivi-évaluation", org: "ONG nutrition · Lomé, Togo",
+                initials: "AD",
+                quote: "Je partais de zéro en informatique. Aujourd'hui je conçois mes propres formulaires KoboCollect et je sors les indicateurs MUAC toute seule. Sur le terrain à Agoè, ça a tout changé : plus de papier, des données fiables le jour même.",
+              },
+              {
+                name: "Boukari S.", role: "Chargé de projets WASH", org: "Coopératives · Kara, Togo",
+                initials: "BS",
+                quote: "Le projet QGIS m'a permis d'identifier 7 villages sans point d'eau à moins de 2 km. J'ai présenté la carte au bailleur, et les forages ont été budgétisés. Une compétence qui se voit immédiatement sur le terrain.",
+              },
+              {
+                name: "Fatoumata K.", role: "Coordinatrice MEAL", org: "ONG régionale · Ouagadougou, Burkina Faso",
+                initials: "FK",
+                quote: "Avant, je passais deux semaines par trimestre sur les rapports. Le pipeline automatisé du Projet 3 me fait tout en un clic : données Kobo, cartes, Excel, PDF. Je consacre enfin ce temps à l'accompagnement des équipes.",
+              },
+            ].map((t) => (
+              <div key={t.name} className="bg-card rounded-3xl p-6 border border-border/50 flex flex-col">
+                <div className="flex gap-1 mb-4">
+                  {[1,2,3,4,5].map(s => <span key={s} className="text-amber-500">★</span>)}
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed font-serif italic flex-1">« {t.quote} »</p>
+                <div className="flex items-center gap-3 mt-5 pt-4 border-t border-border/40">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">{t.initials}</div>
+                  <div>
+                    <p className="font-medium text-sm">{t.name}</p>
+                    <p className="text-xs text-muted-foreground">{t.role} · {t.org}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* CTA final */}
         <div className="bg-primary/5 rounded-3xl p-10 border border-primary/20 text-center">
           <GraduationCap className="w-12 h-12 text-primary mx-auto mb-4" />
