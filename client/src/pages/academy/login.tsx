@@ -61,6 +61,10 @@ export default function AcademyLogin() {
         </div>
       </div>
 
+      <div className="text-right mt-2">
+        <button onClick={() => navigate("/academy/forgot-password")} className="text-xs text-primary hover:underline">Mot de passe oublié ?</button>
+      </div>
+
       {error && <p className="text-sm text-destructive mt-4">{error}</p>}
 
       <Button className="w-full mt-6 gap-2" size="lg" onClick={submit} disabled={loading}>
