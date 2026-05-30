@@ -706,6 +706,55 @@ app.post("/api/academy/register", async (req, res) => {
   res.status(201).json({ token, student: data, emailSent: !!resend });
 });
 
+// ── Soumettre le test d'aptitude (étudiant authentifié) ──
+app.post("/api/academy/submit-test", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { score } = req.body;
+  if (score == null) return res.status(400).json({ message: "Score requis" });
+  const passed = score >= 21;
+
+  await supabase.from("students")
+    .update({ entry_score: score, status: passed ? "active" : "pending_test" })
+    .eq("id", sid);
+
+  const { data: existingTest } = await supabase.from("grades")
+    .select("id").eq("student_id", sid).eq("type", "entry_test").maybeSingle();
+  if (existingTest) {
+    await supabase.from("grades").update({ score, graded_at: new Date().toISOString() }).eq("id", existingTest.id);
+  } else {
+    await supabase.from("grades").insert({
+      student_id: sid, title: "Test de sélection MEAL", score, max_score: 30, type: "entry_test",
+    });
+  }
+
+  // Si réussi : inscrire à TOUS les cours publiés (pas seulement le premier)
+  if (passed) {
+    const { data: courses } = await supabase.from("sms_courses").select("id").eq("is_published", true);
+    if (courses?.length) {
+      const { data: existing } = await supabase.from("enrollments").select("course_id").eq("student_id", sid);
+      const already = new Set((existing || []).map((e: any) => e.course_id));
+      const toAdd = courses.filter((co: any) => !already.has(co.id)).map((co: any) => ({ student_id: sid, course_id: co.id }));
+      if (toAdd.length) await supabase.from("enrollments").insert(toAdd);
+    }
+  }
+
+  res.json({ passed, score, status: passed ? "active" : "pending_test" });
+});
+
+// ── Statut du test pour l'étudiant connecté ──
+app.get("/api/academy/test-status", requireStudent, async (req, res) => {
+  const sid = (req as any).student.sid;
+  const { data } = await supabase.from("students").select("entry_score, status").eq("id", sid).single();
+  const { data: test } = await supabase.from("grades")
+    .select("score, graded_at").eq("student_id", sid).eq("type", "entry_test").maybeSingle();
+  res.json({
+    hasTaken: !!test,
+    score: data?.entry_score ?? 0,
+    passed: (data?.entry_score ?? 0) >= 21,
+    status: data?.status ?? "pending_test",
+  });
+});
+
 // ── Vérifier l'email via le token ──
 app.post("/api/academy/verify", async (req, res) => {
   const { token } = req.body;
