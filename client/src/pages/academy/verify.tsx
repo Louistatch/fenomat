@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { SEO } from "@/components/seo";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Loader2, Mail } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Mail, GraduationCap } from "lucide-react";
 
 export default function AcademyVerify() {
   const [, navigate] = useLocation();
@@ -31,9 +31,12 @@ export default function AcademyVerify() {
       {state === "loading" && (<><Loader2 className="w-12 h-12 text-primary mx-auto mb-4 animate-spin" /><p className="text-muted-foreground">Vérification en cours…</p></>)}
       {state === "ok" && (<>
         <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-5"><CheckCircle2 className="w-8 h-8 text-primary" /></div>
-        <h1 className="text-2xl font-bold mb-2">Email vérifié !</h1>
-        <p className="text-muted-foreground mb-6">{message} Vous pouvez maintenant passer le test d'aptitude.</p>
-        <Button onClick={() => navigate("/elearning")} className="gap-2"><Mail className="w-4 h-4" /> Passer au test</Button>
+        <h1 className="text-2xl font-bold mb-2">Email vérifié ! 🎉</h1>
+        <p className="text-muted-foreground mb-6">Votre compte est maintenant activé. Prochaine étape : passer le test d'aptitude pour débloquer vos cours.</p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Button onClick={() => navigate("/elearning")} className="gap-2"><GraduationCap className="w-4 h-4" /> Passer le test</Button>
+          <Button variant="outline" onClick={() => navigate("/academy/dashboard")}>Mon espace</Button>
+        </div>
       </>)}
       {state === "error" && (<>
         <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-5"><XCircle className="w-8 h-8 text-destructive" /></div>
