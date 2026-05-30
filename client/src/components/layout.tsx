@@ -1,11 +1,12 @@
 import { Link, useLocation } from "wouter";
 import { ReactNode, useState, useEffect } from "react";
-import { Menu, X, BookOpen, User, Home, Lightbulb, Calendar, Mail, FileText, HelpCircle, GraduationCap } from "lucide-react";
+import { Menu, X, BookOpen, User, Home, Lightbulb, Calendar, Mail, FileText, HelpCircle, GraduationCap, LogOut, LayoutDashboard, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Newsletter } from "@/components/newsletter";
 import { NewsletterPopup } from "@/components/newsletter-popup";
 import { TermsPopup } from "@/components/terms-popup";
 import { useQuery } from "@tanstack/react-query";
+import { getStudent, clearStudentSession, isStudentLoggedIn } from "@/lib/student";
 
 const NAV_ITEMS = [
   { href: "/", label: "Accueil", icon: Home },
@@ -20,7 +21,7 @@ const NAV_ITEMS = [
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -38,7 +39,21 @@ export function Layout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setStudentMenuOpen(false);
   }, [location]);
+
+  const [student, setStudentState] = useState(getStudent());
+  const [studentMenuOpen, setStudentMenuOpen] = useState(false);
+  useEffect(() => {
+    // Resynchroniser l'identité étudiant à chaque navigation
+    setStudentState(getStudent());
+  }, [location]);
+  function handleStudentLogout() {
+    clearStudentSession();
+    setStudentState(null);
+    setStudentMenuOpen(false);
+    navigate("/");
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -64,6 +79,51 @@ export function Layout({ children }: { children: ReactNode }) {
                 {item.label}
               </Link>
             ))}
+            {/* Menu étudiant (connecté) ou bouton Academy */}
+            {student ? (
+              <div className="relative ml-2">
+                <button onClick={() => setStudentMenuOpen(o => !o)}
+                  className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/15 transition-colors">
+                  <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
+                    {student.full_name?.split(" ").map((n: string) => n[0]).slice(0,2).join("") || "ET"}
+                  </span>
+                  <span className="text-sm font-medium text-primary max-w-[100px] truncate">{student.full_name?.split(" ")[0]}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-primary transition-transform ${studentMenuOpen ? "rotate-180" : ""}`} />
+                </button>
+                {studentMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setStudentMenuOpen(false)} />
+                    <div className="absolute right-0 mt-2 w-56 bg-card border border-border/60 rounded-2xl shadow-xl z-50 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-border/50">
+                        <p className="text-sm font-medium truncate">{student.full_name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{student.email}</p>
+                      </div>
+                      <button onClick={() => { setStudentMenuOpen(false); navigate("/academy/dashboard"); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors text-left">
+                        <LayoutDashboard className="w-4 h-4 text-primary" /> Tableau de bord
+                      </button>
+                      <button onClick={() => { setStudentMenuOpen(false); navigate("/academy/profile"); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors text-left">
+                        <User className="w-4 h-4 text-primary" /> Mon profil
+                      </button>
+                      <button onClick={() => { setStudentMenuOpen(false); navigate("/elearning"); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors text-left">
+                        <GraduationCap className="w-4 h-4 text-primary" /> Mes cours
+                      </button>
+                      <button onClick={handleStudentLogout}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-destructive/10 text-destructive transition-colors text-left border-t border-border/50">
+                        <LogOut className="w-4 h-4" /> Déconnexion
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <Link href="/academy/login"
+                className="ml-2 px-4 py-2 rounded-full text-sm font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity flex items-center gap-1.5">
+                <GraduationCap className="w-4 h-4" /> Espace étudiant
+              </Link>
+            )}
           </nav>
 
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
@@ -73,16 +133,43 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
 
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-background/95 backdrop-blur-md lg:hidden pt-24 px-6 flex flex-col gap-4">
+        <div className="fixed inset-0 z-40 bg-background/95 backdrop-blur-md lg:hidden pt-24 px-6 flex flex-col gap-3 overflow-y-auto pb-12">
           {NAV_ITEMS.map((item) => (
             <Link key={item.href} href={item.href}
-              className={`flex items-center gap-4 text-xl font-medium p-4 rounded-2xl transition-colors ${
+              className={`flex items-center gap-4 text-lg font-medium p-3.5 rounded-2xl transition-colors ${
                 location === item.href ? "bg-primary/10 text-primary" : "text-foreground"
               }`}>
               <item.icon className="w-6 h-6" />
               {item.label}
             </Link>
           ))}
+          <div className="h-px bg-border/50 my-2" />
+          {student ? (
+            <>
+              <div className="flex items-center gap-3 px-3 py-2">
+                <span className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                  {student.full_name?.split(" ").map((n: string) => n[0]).slice(0,2).join("") || "ET"}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{student.full_name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{student.email}</p>
+                </div>
+              </div>
+              <Link href="/academy/dashboard" className="flex items-center gap-4 text-lg font-medium p-3.5 rounded-2xl text-foreground">
+                <LayoutDashboard className="w-6 h-6 text-primary" /> Tableau de bord
+              </Link>
+              <Link href="/academy/profile" className="flex items-center gap-4 text-lg font-medium p-3.5 rounded-2xl text-foreground">
+                <User className="w-6 h-6 text-primary" /> Mon profil
+              </Link>
+              <button onClick={handleStudentLogout} className="flex items-center gap-4 text-lg font-medium p-3.5 rounded-2xl text-destructive text-left">
+                <LogOut className="w-6 h-6" /> Déconnexion
+              </button>
+            </>
+          ) : (
+            <Link href="/academy/login" className="flex items-center gap-4 text-lg font-medium p-3.5 rounded-2xl bg-primary text-primary-foreground">
+              <GraduationCap className="w-6 h-6" /> Espace étudiant
+            </Link>
+          )}
         </div>
       )}
 
