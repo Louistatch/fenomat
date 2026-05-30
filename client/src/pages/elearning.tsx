@@ -211,7 +211,7 @@ export default function ELearning() {
   // ── Vérifie l'authentification avant de démarrer le test
   function startTest() {
     if (!isStudentLoggedIn()) {
-      navigate("/academy/login");
+      navigate("/academy/register");
       return;
     }
     setView("test");
