@@ -1067,6 +1067,34 @@ app.post("/api/admin/academy/notify-course/:id", requireAuth, async (req, res) =
   res.json({ message: `Notification envoyée à ${count} étudiant(s)`, count });
 });
 
+
+// ── ADMIN : diagnostic de la configuration email ──
+app.get("/api/admin/academy/email-status", requireAuth, async (_req, res) => {
+  res.json({
+    resendConfigured: !!resend,
+    fromEmail: FROM_EMAIL,
+    siteUrl: SITE_URL,
+    note: resend ? "Resend actif" : "RESEND_API_KEY manquant — aucun email ne partira",
+  });
+});
+
+// ── ADMIN : envoyer un email de test ──
+app.post("/api/admin/academy/test-email", requireAuth, async (req, res) => {
+  const { to } = req.body;
+  if (!to) return res.status(400).json({ message: "Adresse 'to' requise" });
+  if (!resend) return res.status(400).json({ message: "RESEND_API_KEY non configuré sur Vercel" });
+  try {
+    const result = await resend.emails.send({
+      from: FROM_EMAIL, to,
+      subject: "Test DataMEAL Academy",
+      html: emailLayout('<div class="h"><h1>Test réussi</h1></div><div class="b"><p>Si vous lisez cet email, la configuration Resend de DataMEAL Academy fonctionne correctement.</p></div>'),
+    });
+    res.json({ message: "Email de test envoyé", id: (result as any)?.data?.id || null });
+  } catch (e: any) {
+    res.status(500).json({ message: "Échec d'envoi", error: e?.message || String(e) });
+  }
+});
+
 // ══════════════ ADMIN — Gestion école ══════════════
 
 app.get("/api/admin/academy/students", requireAuth, async (_req, res) => {
