@@ -19,6 +19,8 @@ export default function AcademyProfile() {
   const [msg, setMsg] = useState("");
   const [pwd, setPwd] = useState({ current: "", next: "", confirm: "" });
   const [pwdMsg, setPwdMsg] = useState("");
+  const [code, setCode] = useState("");
+  const [codeMsg, setCodeMsg] = useState("");
 
   useEffect(() => {
     if (!isStudentLoggedIn()) { navigate("/academy/login"); return; }
@@ -75,6 +77,17 @@ export default function AcademyProfile() {
     setTimeout(() => setMsg(""), 3000);
   }
 
+  async function verifyCode() {
+    setCodeMsg("");
+    try {
+      const res = await studentFetch("/api/academy/verify-code", { method: "POST", body: JSON.stringify({ code }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setCodeMsg("Email vérifié ✓");
+      setP((prev: any) => ({ ...prev, email_verified: true }));
+    } catch (e: any) { setCodeMsg(e.message); }
+  }
+
   if (loading) return <div className="flex justify-center py-32"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!p) return null;
 
@@ -103,11 +116,21 @@ export default function AcademyProfile() {
         </div>
       </div>
 
-      {/* Email non vérifié */}
+      {/* Email non vérifié — vérification par code (Supabase) */}
       {!p.email_verified && (
-        <div className="bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-900/40 rounded-2xl p-4 mb-6 flex items-center justify-between gap-3">
-          <p className="text-sm text-amber-700 dark:text-amber-300">Votre email n'est pas encore vérifié.</p>
-          <Button size="sm" variant="outline" onClick={resendVerify}>Renvoyer l'email</Button>
+        <div className="bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-900/40 rounded-2xl p-5 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Votre email n'est pas encore vérifié</p>
+          </div>
+          <p className="text-sm text-amber-700/80 dark:text-amber-400/70 mb-3">Entrez le code à 6 chiffres reçu par email, ou cliquez sur le lien dans l'email.</p>
+          <div className="flex gap-2 flex-wrap">
+            <input value={code} onChange={e => setCode(e.target.value)} placeholder="123456" maxLength={6}
+              className="w-32 px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-800 bg-background text-sm font-mono tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-amber-400/30" />
+            <Button size="sm" onClick={verifyCode} disabled={code.length !== 6}>Vérifier</Button>
+            <Button size="sm" variant="outline" onClick={resendVerify}>Renvoyer l'email</Button>
+          </div>
+          {codeMsg && <p className={`text-sm mt-2 ${codeMsg.includes("✓") ? "text-primary" : "text-destructive"}`}>{codeMsg}</p>}
         </div>
       )}
 
