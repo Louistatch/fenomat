@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { SEO } from "@/components/seo";
 import { Button } from "@/components/ui/button";
 import {
-  GraduationCap, LogOut, TrendingUp, Award, BookOpen, Loader2,
+  GraduationCap, LogOut, User, TrendingUp, Award, BookOpen, Loader2,
   CheckCircle2, Clock, Trophy, ChevronRight, Target,
 } from "lucide-react";
 import {
@@ -76,7 +76,10 @@ export default function AcademyDashboard() {
             <p className="text-sm text-muted-foreground">{student?.email}</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" className="gap-2" onClick={logout}><LogOut className="w-4 h-4" /> Déconnexion</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate("/academy/profile")}><User className="w-4 h-4" /> Mon profil</Button>
+          <Button variant="outline" size="sm" className="gap-2" onClick={logout}><LogOut className="w-4 h-4" /> Déconnexion</Button>
+        </div>
       </div>
 
       {/* Metric cards */}
