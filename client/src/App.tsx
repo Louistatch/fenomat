@@ -23,6 +23,10 @@ import AcademyRegister from "@/pages/academy/register";
 import AcademyLogin from "@/pages/academy/login";
 import AcademyDashboard from "@/pages/academy/dashboard";
 import AcademyClassroom from "@/pages/academy/classroom";
+import AcademyVerify from "@/pages/academy/verify";
+import AcademyForgotPassword from "@/pages/academy/forgot-password";
+import AcademyResetPassword from "@/pages/academy/reset-password";
+import AcademyProfile from "@/pages/academy/profile";
 
 // Admin
 import AdminLogin from "@/pages/admin/login";
@@ -78,6 +82,10 @@ function App() {
             <Route path="/academy/login">{() => <Layout><AcademyLogin /></Layout>}</Route>
             <Route path="/academy/dashboard">{() => <Layout><AcademyDashboard /></Layout>}</Route>
             <Route path="/academy/classroom/:id">{() => <Layout><AcademyClassroom /></Layout>}</Route>
+            <Route path="/academy/verify">{() => <Layout><AcademyVerify /></Layout>}</Route>
+            <Route path="/academy/forgot-password">{() => <Layout><AcademyForgotPassword /></Layout>}</Route>
+            <Route path="/academy/reset-password">{() => <Layout><AcademyResetPassword /></Layout>}</Route>
+            <Route path="/academy/profile">{() => <Layout><AcademyProfile /></Layout>}</Route>
 
             {/* Public routes */}
             <Route path="/">{() => <Layout><Home /></Layout>}</Route>
