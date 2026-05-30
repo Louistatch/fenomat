@@ -1331,6 +1331,41 @@ function campaignEmailHtml(name: string | undefined, subject: string, content: s
 
 
 // ══════════════ Templates email Academy ══════════════
+// ── Layout email dédié DataMEAL Academy ──
+function academyEmailLayout(content: string) {
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{margin:0;padding:0;background:#eef2f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:600px;margin:24px auto;padding:0 16px}
+  .card{background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 8px 32px rgba(13,148,136,.12)}
+  .hd{background:linear-gradient(135deg,#0d9488,#0f766e);padding:36px 32px;text-align:center}
+  .hd .logo{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.15);padding:8px 16px;border-radius:100px;margin-bottom:16px}
+  .hd .logo span{color:#fff;font-size:13px;font-weight:600;letter-spacing:.5px}
+  .hd h1{color:#fff;font-size:23px;margin:0;font-weight:800;line-height:1.2}
+  .hd .sub{color:rgba(255,255,255,.85);font-size:14px;margin:8px 0 0}
+  .bd{padding:32px}
+  .bd p{color:#374151;font-size:15px;line-height:1.7;margin:0 0 16px}
+  .badge{display:inline-block;background:#ccfbf1;color:#0d9488;padding:5px 14px;border-radius:100px;font-size:12px;font-weight:700;margin-bottom:18px}
+  .btn{display:inline-block;background:#0d9488;color:#fff!important;text-decoration:none;padding:15px 36px;border-radius:12px;font-weight:700;font-size:15px;margin:8px 0}
+  .code{background:#f0fdfa;border:1px dashed #5eead4;border-radius:14px;padding:20px;margin:20px 0;text-align:center}
+  .code .lbl{margin:0 0 8px;font-size:13px;color:#6b7280}
+  .code .val{font-size:32px;font-weight:800;letter-spacing:8px;color:#0d9488;margin:0;font-family:monospace}
+  .info{background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:18px;margin:16px 0}
+  .info h3{color:#111;font-size:16px;margin:0 0 6px}
+  .info p{color:#6b7280;font-size:14px;margin:0}
+  .steps{margin:20px 0;padding:0;list-style:none}
+  .steps li{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;color:#374151;font-size:14px}
+  .steps .n{flex-shrink:0;width:26px;height:26px;border-radius:50%;background:#ccfbf1;color:#0d9488;font-weight:700;font-size:13px;display:inline-flex;align-items:center;justify-content:center}
+  .muted{font-size:13px;color:#9ca3af;line-height:1.6}
+  .ft{padding:24px 32px;text-align:center;background:#f9fafb;border-top:1px solid #eef2f1}
+  .ft .name{color:#0d9488;font-weight:700;font-size:14px;margin:0 0 4px}
+  .ft p{color:#9ca3af;font-size:12px;margin:0 0 4px}
+  .ft a{color:#0d9488;text-decoration:none}
+</style></head><body><div class="wrap"><div class="card">${content}
+  <div class="ft"><p class="name">🎓 DataMEAL Academy</p><p>Formation gratuite par projets · KoboCollect · Python · QGIS</p><p>Afrique de l'Ouest · <a href="${SITE_URL}/academy/login">Mon espace étudiant</a></p><p style="margin-top:12px;font-size:11px;color:#d1d5db">Vous recevez cet email car vous avez un compte sur DataMEAL Academy.</p></div>
+</div></div></body></html>`;
+}
+
 function verifyEmailHtml(name: string, url: string, code?: string) {
   const codeBlock = code ? `<div class="cd" style="text-align:center"><p style="margin:0 0 8px;font-size:13px">Ou entrez ce code dans l'application :</p><p style="font-size:28px;font-weight:700;letter-spacing:6px;color:#16a34a;margin:0">${code}</p></div>` : "";
   return emailLayout(`<div class="h"><img src="${PHOTO_URL}" alt="DataMEAL Academy" class="av"><h1>Confirmez votre inscription</h1><p>DataMEAL Academy</p></div><div class="b"><span class="bg">🎓 Bienvenue</span><p>Bonjour ${name},</p><p>Merci de rejoindre <strong>DataMEAL Academy</strong>, la formation gratuite par projets en MEAL (KoboCollect, Python, QGIS) pour l'Afrique de l'Ouest.</p><p>Pour activer votre compte et passer le test d'aptitude, confirmez votre adresse email :</p><p style="text-align:center"><a href="${url}" class="cta">Confirmer mon email</a></p>${codeBlock}<p style="font-size:13px;color:#9ca3af">Ce lien expire dans 24 heures. Si vous n'avez pas créé de compte, ignorez cet email.</p><p>À très vite en cours,<br><strong>L'équipe DataMEAL Academy</strong></p></div>`);
