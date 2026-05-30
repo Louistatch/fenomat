@@ -60,23 +60,39 @@ export default function AcademyClassroom() {
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [enrolled, setEnrolled] = useState(false);
+  const [testPassed, setTestPassed] = useState(false);
 
   useEffect(() => {
     if (!isStudentLoggedIn()) { navigate("/academy/login"); return; }
     if (!courseId) return;
     (async () => {
       try {
-        const [c, enr, g] = await Promise.all([
+        const [c, enr, g, ts] = await Promise.all([
           fetch(`/api/academy/courses/${courseId}`).then(r => r.json()),
           studentFetch("/api/academy/my-enrollments").then(r => r.json()),
           studentFetch("/api/academy/my-grades").then(r => r.json()),
+          studentFetch("/api/academy/test-status").then(r => r.json()).catch(() => null),
         ]);
-        setCourse(c);
+        // Le cours est valide seulement s'il a un id
+        if (!c || c.message || !c.id) { setCourse(null); setLoading(false); return; }
+        // Normaliser le content de chaque leçon (peut être string ou objet selon Supabase)
+        const lessons = (c.lessons || []).map((l: any) => {
+          let content = l.content;
+          if (typeof content === "string") {
+            try { content = JSON.parse(content); } catch { content = { cells: [] }; }
+          }
+          if (!content || !Array.isArray(content.cells)) content = { cells: [] };
+          return { ...l, content };
+        });
+        setCourse({ ...c, lessons });
         const myEnr = (enr || []).find((e: any) => e.course_id === courseId);
+        setEnrolled(!!myEnr);
         setProgress(myEnr?.progress || 0);
+        setTestPassed(ts?.passed ?? false);
         const done = new Set<number>((g.grades || []).filter((gr: any) => gr.course_id === courseId && gr.lesson_id).map((gr: any) => gr.lesson_id as number));
         setCompletedLessons(done);
-      } catch (e) { /* handled */ } finally { setLoading(false); }
+      } catch (e) { setCourse(null); } finally { setLoading(false); }
     })();
   }, [courseId]);
 
@@ -113,7 +129,35 @@ export default function AcademyClassroom() {
   }
 
   if (loading) return <div className="flex justify-center py-32"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
-  if (!course) return <div className="text-center py-32 text-muted-foreground">Cours introuvable</div>;
+
+  if (!course) return (
+    <div className="max-w-md mx-auto text-center py-32 px-6">
+      <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
+      <h2 className="text-xl font-bold mb-2">Cours introuvable</h2>
+      <p className="text-muted-foreground mb-6">Ce cours n'existe pas ou n'est plus disponible.</p>
+      <Button onClick={() => navigate("/academy/dashboard")}>Retour au tableau de bord</Button>
+    </div>
+  );
+
+  // Accès refusé si non inscrit ET test non réussi
+  if (!enrolled && !testPassed) return (
+    <div className="max-w-md mx-auto text-center py-32 px-6">
+      <Lock className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
+      <h2 className="text-xl font-bold mb-2">Accès verrouillé</h2>
+      <p className="text-muted-foreground mb-6">Vous devez réussir le test d'aptitude (21/30) pour accéder à ce cours.</p>
+      <Button onClick={() => navigate("/elearning")} className="gap-2"><Trophy className="w-4 h-4" /> Passer le test</Button>
+    </div>
+  );
+
+  // Cours sans contenu (leçons non chargées)
+  if (!course.lessons || course.lessons.length === 0) return (
+    <div className="max-w-md mx-auto text-center py-32 px-6">
+      <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
+      <h2 className="text-xl font-bold mb-2">Contenu en préparation</h2>
+      <p className="text-muted-foreground mb-6">Les leçons de ce cours ne sont pas encore disponibles. Revenez bientôt !</p>
+      <Button onClick={() => navigate("/academy/dashboard")}>Retour au tableau de bord</Button>
+    </div>
+  );
 
   const lesson = course.lessons[activeLesson];
   const cells = lesson?.content?.cells || [];
