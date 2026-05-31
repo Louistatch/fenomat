@@ -4,7 +4,7 @@ import { SEO } from "@/components/seo";
 import { Button } from "@/components/ui/button";
 import {
   ChevronLeft, ChevronRight, CheckCircle2, PlayCircle, Terminal,
-  FileCode2, Loader2, Trophy, Lock, BookOpen, Star, Info, Lightbulb,
+  FileCode2, Loader2, Trophy, Lock, X, BookOpen, Star, Info, Lightbulb,
   AlertTriangle, ExternalLink, MapPin, BookMarked, Image as ImageIcon,
 } from "lucide-react";
 import { studentFetch, isStudentLoggedIn } from "@/lib/student";
@@ -62,17 +62,19 @@ export default function AcademyClassroom() {
   const [submitting, setSubmitting] = useState(false);
   const [enrolled, setEnrolled] = useState(false);
   const [testPassed, setTestPassed] = useState(false);
+  const [schedule, setSchedule] = useState<Record<number, any>>({});
 
   useEffect(() => {
     if (!isStudentLoggedIn()) { navigate("/academy/login"); return; }
     if (!courseId) return;
     (async () => {
       try {
-        const [c, enr, g, ts] = await Promise.all([
+        const [c, enr, g, ts, sched] = await Promise.all([
           fetch(`/api/academy/courses/${courseId}`).then(r => r.json()),
           studentFetch("/api/academy/my-enrollments").then(r => r.json()),
           studentFetch("/api/academy/my-grades").then(r => r.json()),
           studentFetch("/api/academy/test-status").then(r => r.json()).catch(() => null),
+          studentFetch("/api/academy/lesson-schedule").then(r => r.json()).catch(() => []),
         ]);
         // Le cours est valide seulement s'il a un id
         if (!c || c.message || !c.id) { setCourse(null); setLoading(false); return; }
@@ -92,6 +94,10 @@ export default function AcademyClassroom() {
         setTestPassed(ts?.passed ?? false);
         const done = new Set<number>((g.grades || []).filter((gr: any) => gr.course_id === courseId && gr.lesson_id).map((gr: any) => gr.lesson_id as number));
         setCompletedLessons(done);
+        // Map du planning hebdomadaire par lesson_id
+        const schedMap: Record<number, any> = {};
+        (Array.isArray(sched) ? sched : []).forEach((s: any) => { schedMap[s.lesson_id] = s; });
+        setSchedule(schedMap);
       } catch (e) { setCourse(null); } finally { setLoading(false); }
     })();
   }, [courseId]);
@@ -101,6 +107,11 @@ export default function AcademyClassroom() {
   async function completeLesson() {
     if (!course || !courseId) return;
     const lesson = course.lessons[activeLesson];
+  const lessonSched = lesson ? schedule[lesson.id] : null;
+  const lessonDone = lesson ? completedLessons.has(lesson.id) : false;
+  const lessonStatus = lessonDone ? "completed" : (lessonSched?.status || (testPassed && activeLesson === 0 ? "available" : "locked"));
+  const lessonLocked = lessonStatus === "locked";
+  const lessonMissed = lessonStatus === "missed";
     setSubmitting(true);
     try {
       const res = await studentFetch("/api/academy/complete-lesson", {
@@ -160,6 +171,11 @@ export default function AcademyClassroom() {
   );
 
   const lesson = course.lessons[activeLesson];
+  const lessonSched = lesson ? schedule[lesson.id] : null;
+  const lessonDone = lesson ? completedLessons.has(lesson.id) : false;
+  const lessonStatus = lessonDone ? "completed" : (lessonSched?.status || (testPassed && activeLesson === 0 ? "available" : "locked"));
+  const lessonLocked = lessonStatus === "locked";
+  const lessonMissed = lessonStatus === "missed";
   const cells = lesson?.content?.cells || [];
   const codeCells = cells.filter(c => c.type === "code");
   const allCodeRan = codeCells.every((_, i) => ranCells.has(`${activeLesson}-code-${i}`));
@@ -182,11 +198,19 @@ export default function AcademyClassroom() {
         <nav className="space-y-1">
           {course.lessons.map((l, i) => {
             const done = completedLessons.has(l.id);
+            const sp = schedule[l.id];
+            const st = sp?.status || (done ? "completed" : "locked");
+            const isLocked = !done && st === "locked";
+            const isMissed = !done && st === "missed";
             return (
               <button key={l.id} onClick={() => setActiveLesson(i)}
                 className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-colors flex items-center gap-2 ${activeLesson === i ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
-                {done ? <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" /> : <span className="w-3.5 h-3.5 rounded-full border border-current shrink-0" />}
-                <span className="truncate">{i + 1}. {l.title}</span>
+                {done ? <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                  : isMissed ? <X className="w-3.5 h-3.5 text-destructive shrink-0" />
+                  : isLocked ? <Lock className="w-3.5 h-3.5 shrink-0 opacity-50" />
+                  : <span className="w-3.5 h-3.5 rounded-full border border-current shrink-0" />}
+                <span className="truncate flex-1">{i + 1}. {l.title}</span>
+                {sp && <span className="text-[9px] text-muted-foreground shrink-0">S{sp.week_index}</span>}
               </button>
             );
           })}
@@ -200,9 +224,29 @@ export default function AcademyClassroom() {
           <span className="text-foreground">Leçon {activeLesson + 1}</span>
         </div>
         <h1 className="text-2xl font-bold mb-1">{lesson?.title}</h1>
-        <p className="text-sm text-muted-foreground mb-6">{lesson?.points} points · {isLessonDone ? "Complétée ✓" : "Non complétée"}</p>
+        <p className="text-sm text-muted-foreground mb-4">{lesson?.points} points · {isLessonDone ? "Complétée ✓" : "Non complétée"}</p>
 
-        {/* Notebook cells */}
+        {lessonLocked && (
+          <div className="bg-muted/50 border border-border rounded-2xl p-5 mb-6 flex items-center gap-3">
+            <Lock className="w-5 h-5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="font-medium text-sm">Leçon verrouillée</p>
+              <p className="text-xs text-muted-foreground">{lessonSched?.unlock_at ? `Se débloque le ${new Date(lessonSched.unlock_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} (semaine ${lessonSched.week_index}). Une leçon par semaine.` : "Cette leçon se débloquera prochainement."}</p>
+            </div>
+          </div>
+        )}
+        {lessonMissed && (
+          <div className="bg-destructive/5 border border-destructive/30 rounded-2xl p-5 mb-6 flex items-center gap-3">
+            <X className="w-5 h-5 text-destructive shrink-0" />
+            <div>
+              <p className="font-medium text-sm text-destructive">Recalé(e) sur cette leçon</p>
+              <p className="text-xs text-muted-foreground">La fenêtre d'une semaine pour compléter cette leçon est dépassée. Contactez l'administration si besoin.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Notebook cells (masquées si verrouillée) */}
+        {!lessonLocked && !lessonMissed && (
         <div className="space-y-4 mb-8">
           {cells.map((cell, ci) => {
             // ── Markdown (avec tableaux simples) ──
@@ -329,6 +373,7 @@ export default function AcademyClassroom() {
             );
           })}
         </div>
+        )}
 
         {/* Nav + complete */}
         <div className="flex items-center justify-between pt-4 border-t border-border/50">
@@ -337,7 +382,7 @@ export default function AcademyClassroom() {
           </Button>
           <div className="flex gap-2">
             {!isLessonDone && (
-              <Button onClick={completeLesson} disabled={submitting || (codeCells.length > 0 && !allCodeRan)} className="gap-2">
+              <Button onClick={completeLesson} disabled={submitting || lessonLocked || lessonMissed || (codeCells.length > 0 && !allCodeRan)} className="gap-2">
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 {codeCells.length > 0 && !allCodeRan ? "Exécutez les cellules" : "Marquer comme complété"}
               </Button>
