@@ -4,8 +4,7 @@ import { SEO } from "@/components/seo";
 import { Button } from "@/components/ui/button";
 import {
   GraduationCap, LogOut, User, TrendingUp, Award, BookOpen, Loader2,
-  CheckCircle2, Clock, Trophy, ChevronRight, Target,
-} from "lucide-react";
+  CheckCircle2, Clock, Trophy, ChevronRight, Target, Lock, X } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar,
 } from "recharts";
@@ -23,22 +22,24 @@ export default function AcademyDashboard() {
   const [attestations, setAttestations] = useState<any[]>([]);
   const [testStatus, setTestStatus] = useState<any>(null);
   const [allCourses, setAllCourses] = useState<any[]>([]);
+  const [schedule, setSchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!isStudentLoggedIn()) { navigate("/academy/login"); return; }
     (async () => {
       try {
-        const [g, e, a, ts, ac] = await Promise.all([
+        const [g, e, a, ts, ac, sch] = await Promise.all([
           studentFetch("/api/academy/my-grades").then(r => r.json()),
           studentFetch("/api/academy/my-enrollments").then(r => r.json()),
           studentFetch("/api/academy/my-attestations").then(r => r.json()),
           studentFetch("/api/academy/test-status").then(r => r.json()).catch(() => null),
           fetch("/api/academy/courses").then(r => r.json()).catch(() => []),
+          studentFetch("/api/academy/lesson-schedule").then(r => r.json()).catch(() => []),
         ]);
         setGrades(g.grades || []); setAverage(g.average || 0);
         setEnrollments(e || []); setAttestations(a || []);
-        setTestStatus(ts); setAllCourses(Array.isArray(ac) ? ac : []);
+        setTestStatus(ts); setAllCourses(Array.isArray(ac) ? ac : []); setSchedule(Array.isArray(sch) ? sch : []);
       } catch (err) { /* handled by studentFetch */ } finally { setLoading(false); }
     })();
   }, []);
@@ -196,6 +197,54 @@ export default function AcademyDashboard() {
           </div>
         ))}
       </div>
+
+      {/* Planning hebdomadaire (modèle WQU) */}
+      {testStatus?.passed && schedule.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold">Mon planning hebdomadaire</h2>
+            <span className="text-xs text-muted-foreground">1 leçon débloquée par semaine</span>
+          </div>
+          <div className="space-y-2">
+            {schedule.map((s: any) => {
+              const isDone = s.status === "completed";
+              const isAvail = s.status === "available";
+              const isMissed = s.status === "missed";
+              const isLocked = s.status === "locked";
+              return (
+                <div key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border ${
+                  isAvail ? "border-primary/40 bg-primary/5" :
+                  isDone ? "border-border/50 bg-card" :
+                  isMissed ? "border-destructive/30 bg-destructive/5" :
+                  "border-border/40 bg-muted/30 opacity-70"
+                }`}>
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                    isDone ? "bg-primary text-primary-foreground" :
+                    isAvail ? "bg-primary/15 text-primary" :
+                    isMissed ? "bg-destructive/15 text-destructive" :
+                    "bg-muted text-muted-foreground"
+                  }`}>S{s.week_index}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{s.sms_lessons?.title || "Leçon"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {s.sms_courses?.code} · {
+                        isDone ? "Complétée ✓" :
+                        isAvail ? `À faire avant le ${new Date(s.due_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}` :
+                        isMissed ? "Recalé(e) — fenêtre dépassée" :
+                        `Débloque le ${new Date(s.unlock_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`
+                      }
+                    </p>
+                  </div>
+                  {isAvail && <Button size="sm" onClick={() => navigate(`/academy/classroom/${s.course_id}`)} className="shrink-0">Commencer</Button>}
+                  {isDone && <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />}
+                  {isLocked && <Lock className="w-4 h-4 text-muted-foreground shrink-0" />}
+                  {isMissed && <X className="w-4 h-4 text-destructive shrink-0" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {allCourses.length > 0 && (
         <div id="catalogue" className="mb-8">
