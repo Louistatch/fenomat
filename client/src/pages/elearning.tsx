@@ -5,8 +5,7 @@ import {
   GraduationCap, ChevronRight, ChevronLeft, CheckCircle2,
   Lock, PlayCircle, BookOpen, Map, FlaskConical, Trophy,
   ArrowRight, Terminal, FileCode2, Layers, ClipboardCheck,
-  Star, Cpu, Globe, BarChart3, Download, Send, X,
-} from "lucide-react";
+  Star, Cpu, Globe, BarChart3, Download, Send, X, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isStudentLoggedIn, getStudent, studentFetch } from "@/lib/student";
 
@@ -173,6 +172,8 @@ const CHAPTERS = [
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function ELearning() {
   const [view, setView] = useState<View>("landing");
+  const [testStatus, setTestStatus] = useState<any>(null);
+  const [submitResult, setSubmitResult] = useState<any>(null);
   const [, navigate] = useLocation();
   const [qIdx, setQIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
@@ -194,6 +195,12 @@ export default function ELearning() {
 
   useEffect(() => { topRef.current?.scrollIntoView({ behavior: "smooth" }); }, [view, chapter]);
 
+  useEffect(() => {
+    if (isStudentLoggedIn()) {
+      studentFetch("/api/academy/test-status").then(r => r.json()).then(setTestStatus).catch(() => {});
+    }
+  }, []);
+
   // ── SUBMIT TEST (étudiant authentifié — score enregistré sur son compte)
   async function submitTest() {
     let s = 0;
@@ -201,17 +208,26 @@ export default function ELearning() {
     setScore(s);
     setView("test-result");
     try {
-      await studentFetch("/api/academy/submit-test", {
+      const res = await studentFetch("/api/academy/submit-test", {
         method: "POST",
         body: JSON.stringify({ score: s }),
       });
-    } catch (e) { /* géré par studentFetch (redirige si session expirée) */ }
+      const data = await res.json();
+      setSubmitResult(data);
+      // rafraîchir le statut
+      studentFetch("/api/academy/test-status").then(r => r.json()).then(setTestStatus).catch(() => {});
+    } catch (e) { /* géré par studentFetch */ }
   }
 
   // ── Vérifie l'authentification avant de démarrer le test
   function startTest() {
     if (!isStudentLoggedIn()) {
       navigate("/academy/register");
+      return;
+    }
+    if (testStatus?.passed) { navigate("/academy/dashboard"); return; }
+    if (testStatus && !testStatus.canRetry && testStatus.nextTestAllowed) {
+      setView("test-result"); // affiche le message de verrou
       return;
     }
     setView("test");
@@ -446,6 +462,20 @@ export default function ELearning() {
   }
 
   function renderTestResult() {
+    if (score === null && testStatus && !testStatus.canRetry && testStatus.nextTestAllowed) {
+      const when = new Date(testStatus.nextTestAllowed).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+      return (
+        <div className="max-w-md mx-auto px-6 py-20 text-center">
+          <div className="w-20 h-20 rounded-full bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center mx-auto mb-6">
+            <Clock className="w-9 h-9 text-amber-600 dark:text-amber-400" />
+          </div>
+          <h2 className="text-2xl font-bold mb-3">Patientez avant de reessayer</h2>
+          <p className="text-muted-foreground mb-2">Vous avez deja passe le test d'admission sans atteindre le score requis.</p>
+          <p className="text-sm mb-8">Vous pourrez le repasser a partir du <strong className="text-primary">{when}</strong> (delai d'une semaine).</p>
+          <Button variant="outline" onClick={() => setView("landing")}>Retour a l'accueil</Button>
+        </div>
+      );
+    }
     const pct = Math.round((score! / QUESTIONS.length) * 100);
     return (
       <div className="max-w-2xl mx-auto px-6 py-12 text-center">
@@ -456,14 +486,19 @@ export default function ELearning() {
         <h2 className="text-2xl font-bold mb-3">{passed ? "🎉 Félicitations !" : "📚 Continue à réviser"}</h2>
         <p className="text-muted-foreground mb-8 font-serif">
           {passed
-            ? `Score : ${pct}% — Vous êtes admis(e) ! Votre score a été enregistré sur votre compte.`
-            : `Score : ${pct}% — Score requis : 70% (21/30). Révisez le MEAL, KoboCollect, Python et QGIS.`}
+            ? "Score : " + pct + "% — Vous etes admis(e) ! Votre attestation d\u0027admission (valable 3 mois) est disponible. Une lecon se debloque chaque semaine."
+            : "Score : " + pct + "% — Score requis : 70% (21/30). Vous pourrez repasser le test dans une semaine."}
         </p>
         <div className="flex flex-wrap gap-4 justify-center mb-10">
           {passed
-            ? <Button size="lg" className="gap-2" onClick={() => navigate("/academy/dashboard")}><GraduationCap className="w-4 h-4" /> Accéder à mes cours</Button>
-            : <Button size="lg" className="gap-2" onClick={() => { setAnswers({}); setQIdx(0); setScore(null); setView("test"); }}>↺ Reprendre le test</Button>}
-          <Button variant="outline" onClick={() => setView("landing")}>← Retour</Button>
+            ? <>
+                <Button size="lg" className="gap-2" onClick={() => navigate("/academy/dashboard")}><GraduationCap className="w-4 h-4" /> Accéder à mes cours</Button>
+                <a href="/api/academy/certificate/admission" target="_blank" rel="noopener noreferrer">
+                  <Button size="lg" variant="outline" className="gap-2"><Download className="w-4 h-4" /> Mon attestation</Button>
+                </a>
+              </>
+            : <Button size="lg" className="gap-2" onClick={() => setView("landing")}>Retour a l'accueil</Button>}
+          {passed && <Button variant="outline" onClick={() => setView("landing")}>Retour</Button>}
         </div>
 
 
